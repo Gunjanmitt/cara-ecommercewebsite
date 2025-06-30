@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>3D Avatar Try-On</title>
+  <style>
+    body { margin: 0; overflow: hidden; font-family: Arial, sans-serif; }
+    #avatarFrame { width: 70vw; height: 100vh; border: none; float: left; }
+    .overlay-ui {
+      position: absolute; top: 10px; left: 10px;
+      background: rgba(255, 255, 255, 0.8); padding: 10px;
+      border-radius: 8px; z-index: 10;
+    }
+    #wardrobe {
+      width: 30vw; height: 100vh; overflow-y: auto;
+      background: #f5f5f5; padding: 20px;
+      box-sizing: border-box; float: right;
+    }
+    #wardrobe button {
+      display: block; margin: 10px 0; padding: 10px;
+      width: 100%; font-size: 16px; cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div class="overlay-ui">
+    <h3>👗 Choose Your Avatar</h3>
+    <button onclick="openAvatarCreator()">Create Avatar</button>
+  </div>
+
+  <iframe id="avatarFrame" allow="camera *; microphone *" src="https://readyplayer.me/avatar?frameApi"></iframe>
+
+  <div id="wardrobe">
+    <h3>🧥 Try On Clothes</h3>
+    <script src="clothes.js"></script>
+    <script>
+      clothesOptions.forEach(item => {
+        const btn = document.createElement('button');
+        btn.innerText = item.name;
+        btn.onclick = () => loadClothes(item.file);
+        document.currentScript.parentElement.appendChild(btn);
+      });
+    </script>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/js/loaders/GLTFLoader.js"></script>
+  <script>
+    const frame = document.getElementById("avatarFrame");
+    function openAvatarCreator() {
+      frame.src = "https://readyplayer.me/avatar?frameApi";
+    }
+
+    let avatarUrl = null, scene, camera, renderer, loader, avatarModel, currentClothes;
+
+    window.addEventListener("message", (event) => {
+      const json = parse(event);
+      if (json?.source !== "readyplayerme") return;
+      if (json.eventName === "v1.frame.ready") {
+        frame.contentWindow.postMessage(JSON.stringify({ target: "readyplayerme", type: "subscribe", eventName: "v1.**" }), "*");
+      }
+      if (json.eventName === "v1.avatar.exported") {
+        avatarUrl = json.data.url;
+        alert("Avatar created. Loading 3D scene...");
+        loadViewerScene(avatarUrl);
+      }
+    });
+
+    function parse(event) {
+      try { return JSON.parse(event.data); } catch { return null; }
+    }
+
+    function loadViewerScene(url) {
+      const container = document.createElement("div");
+      container.style.position = "absolute";
+      container.style.top = "0";
+      container.style.left = "0";
+      container.style.width = "70vw";
+      container.style.height = "100vh";
+      container.style.pointerEvents = "none";
+      document.body.appendChild(container);
+
+      scene = new THREE.Scene();
+      camera = new THREE.PerspectiveCamera(70, container.offsetWidth / container.offsetHeight, 0.01, 100);
+      camera.position.z = 2;
+      renderer = new THREE.WebGLRenderer({ alpha: true });
+      renderer.setSize(container.offsetWidth, container.offsetHeight);
+      container.appendChild(renderer.domElement);
+      loader = new THREE.GLTFLoader();
+      loader.load(url, (gltf) => {
+        avatarModel = gltf.scene;
+        avatarModel.scale.set(1.3, 1.3, 1.3);
+        scene.add(avatarModel);
+        animate();
+      });
+    }
+
+    function loadClothes(file) {
+      if (!scene || !loader) return;
+      if (currentClothes) scene.remove(currentClothes);
+      loader.load(file, (gltf) => {
+        currentClothes = gltf.scene;
+        currentClothes.scale.set(1.3, 1.3, 1.3);
+        scene.add(currentClothes);
+      });
+    }
+
+    function animate() {
+      requestAnimationFrame(animate);
+      if (avatarModel) avatarModel.rotation.y += 0.003;
+      renderer.render(scene, camera);
+    }
+  </script>
+</body>
+</html>
